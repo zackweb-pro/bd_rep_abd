@@ -1,0 +1,106 @@
+# 💻 TP2 – Répartition des données
+
+**Nom & Prénom : Abderrahmane ESSAHIH**  
+**Filière : GL – ENSIAS**
+
+---
+### ➤ Connexion aux serveurs Oracle
+
+```bash
+sqlplus c##essahih/essahih@ensias1
+```
+---
+
+
+## I- Mise en œuvre de la réplication synchrone 
+
+
+
+### 1- Copier la table centrale APPAREIL dans le site de Rabat (Serveur2)
+
+
+```sql
+
+CREATE TABLE Appareil(no_appareil Number(7), designation Varchar(30), prix Number(7, 2), caracteristiques_techniques Varchar(50), Constraint appareil_pk primary key (no_appareil));
+
+```
+![alt text](image-24.png)
+---
+
+```sql
+create sequence seq_appareil order;
+```
+
+![alt text](image-23.png)
+
+
+```sql
+INSERT INTO Appareil VALUES (seq_appareil.nextval, 'pc portable',60.00, 'processeur puissant');
+commit;
+```
+
+![alt text](image-25.png)
+
+```sql
+COPY FROM c##essahih/essahih@ensias1 TO c##essahih/essahih@ensias2 REPLACE Appareil_2 USING SELECT * FROM Appareil;
+```
+
+![alt text](image-26.png)
+
+### 2- Ecrire un trigger sur la base du siège (Serveur1) qui permet d’assurer que toute modification au niveau de la table centrale APPAREIL soit répercutée immédiatement vers l’image de cette table à Rabat.
+
+
+```sql
+CREATE OR REPLACE trigger Trig_MAJ
+AFTER Insert OR Update OR Delete ON Appareil
+For each row
+BEGIN
+IF inserting THEN
+INSERT INTO Appareil_2@lien_ensias1_ensias2
+VALUES (:NEW.no_appareil, :NEW.designation, :NEW.prix,
+:NEW.caracteristiques_techniques);
+ELSIF Updating THEN
+UPDATE Appareil_2@lien_ensias1_ensias2
+SET designation=:NEW.designation, prix=:NEW.prix,
+caracteristiques_techniques=:NEW.caracteristiques_techniques
+WHERE no_appareil=:OLD.no_appareil;
+ELSIF Deleting THEN
+DELETE FROM Appareil_2@lien_ensias1_ensias2 WHERE
+no_appareil=:OLD.no_appareil;
+END IF;
+END;
+/
+```
+
+![alt text](image-27.png)
+
+
+
+```sql
+INSERT INTO Appareil values (seq_appareil.nextval, 'laptop',60, 'amd ryzan 7');
+COMMIT;
+```
+
+![alt text](image-28.png)
+
+## II- Mise en œuvre de la réplication asynchrone 
+
+### 1- Créer une image (cliché) de la table centrale APPAREIL dans chacun des autres
+sites. Le rafraîchissement doit être rapide et sa mise à jour doit être effectuée toutes les 30 minutes. 
+
+```sql
+CREATE DATABASE LINK lien_ensias1 connect to c##essahih IDENTIFIED BY essahih USING 'ensias1';
+```
+![alt text](image-29.png)
+
+```sql
+CREATE MATERIALIZED VIEW LOG ON Appareil;
+```
+
+```sql
+CREATE SNAPSHOT snapshot_appareil REFRESH FAST START WITH SYSDATE
+NEXT SYSDATE +1/(24*60) AS SELECT * FROM Appareil@lien_ensias1;
+```
+
+
+![alt text](image-31.png)
